@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>코트랄 출고정보 자동화 시스템 (v3)</title>
+    <!-- PDF.js 라이브러리 (CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <!-- SheetJS (XLSX.js) 라이브러리 (CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #50e3c2;
+            --background-color: #f4f7f6;
+            --card-background: #ffffff;
+            --text-color: #333;
+            --border-color: #e0e0e0;
+            --header-color: #f8f9fa;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            font-family: var(--font-family);
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            font-size: 14px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background: var(--card-background);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            text-align: center;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .upload-area.dragover {
+            background-color: #e9f5ff;
+            border-color: var(--primary-color);
+        }
+        .upload-area h3 {
+            margin-top: 0;
+        }
+        .upload-area input[type="file"] {
+            display: none;
+        }
+        .upload-btn {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .upload-btn:hover {
+            background-color: #357abd;
+        }
+        .file-list {
+            margin-top: 15px;
+            list-style: none;
+            padding: 0;
+        }
+        .file-list-item {
+            background-color: #f8f9fa;
+            padding: 8px 12px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            animation: fadeIn 0.5s;
+        }
+        .file-delete-btn {
+            background: none;
+            border: none;
+            color: var(--danger-color);
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .options-area, .actions-area {
+            text-align: center;
+            padding: 20px;
+            background: var(--card-background);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+        }
+        .process-btn {
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+        .process-btn:hover {
+            transform: scale(1.05);
+        }
+        .process-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .results-area {
+            margin-top: 20px;
+        }
+        .results-area h2 {
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        th {
+            background-color: var(--header-color);
+            font-weight: bold;
+        }
+        .status-match {
+            color: var(--success-color);
+            font-weight: bold;
+        }
+        .status-mismatch {
+            color: var(--danger-color);
+            font-weight: bold;
+        }
+        .download-buttons {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .download-btn {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 5px;
+            transition: background-color 0.3s;
+        }
+        .download-btn:hover {
+            background-color: #45c4a8;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @media (max-width: 768px) {
+            .grid-container {
+                grid-template-columns: 1fr;
+            }
+            body { padding: 10px; }
+            .container { padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>코트랄 출고정보 자동화 웹앱</h1>
+        <div class="grid-container">
+            <div id="excel-drop-area" class="upload-area">
+                <h3>엑셀 파일 (.xlsx, .xls)</h3>
+                <p>여기로 파일을 드래그 앤 드롭하거나 버튼을 클릭하세요.</p>
+                <input type="file" id="excel-file-input" accept=".xlsx, .xls" multiple>
+                <button class="upload-btn" onclick="document.getElementById('excel-file-input').click()">파일 선택</button>
+                <ul id="excel-file-list" class="file-list"></ul>
+            </div>
+            <div id="pdf-drop-area" class="upload-area">
+                <h3>FedEx PDF 청구서</h3>
+                <p>여기로 파일을 드래그 앤 드롭하거나 버튼을 클릭하세요.</p>
+                <input type="file" id="pdf-file-input" accept=".pdf" multiple>
+                <button class="upload-btn" onclick="document.getElementById('pdf-file-input').click()">파일 선택</button>
+                <ul id="pdf-file-list" class="file-list"></ul>
+            </div>
+        </div>
+        <div class="options-area">
+            <h2>처리 옵션 선택</h2>
+            <input type="radio" id="option1" name="process-option" value="excel" checked>
+            <label for="option1">출고정보만 추출</label>
+            <input type="radio" id="option2" name="process-option" value="pdf">
+            <label for="option2">FedEx 정보만 처리</label>
+            <input type="radio" id="option3" name="process-option" value="compare">
+            <label for="option3">출고정보 vs FedEx 비교</label>
+        </div>
+        <div class="actions-area">
+            <button id="process-btn" class="process-btn" onclick="startAnalysis()">분석 시작</button>
+        </div>
+        <div id="loader" class="loader"></div>
+        <div id="results-area" class="results-area" style="display:none;">
+            <div class="download-buttons">
+                <button id="download-excel-btn" class="download-btn" onclick="downloadExcel()">엑셀 다운로드 (.xlsx)</button>
+                <button id="download-csv-btn" class="download-btn" onclick="downloadCSV()">CSV 다운로드 (.csv)</button>
+            </div>
+            <div id="comparison-results"></div>
+            <div id="fedex-results"></div>
+            <div id="shipping-results"></div>
+        </div>
+    </div>
+
+<script>
+    let excelFiles = [];
+    let pdfFiles = [];
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js`;
+
+    function setupDragDrop(areaId, inputId, fileArray, listId, acceptedTypes) {
+        const dropArea = document.getElementById(areaId);
+        const fileInput = document.getElementById(inputId);
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => dropArea.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); }, false));
+        ['dragenter', 'dragover'].forEach(eventName => dropArea.addEventListener(eventName, () => dropArea.classList.add('dragover'), false));
+        ['dragleave', 'drop'].forEach(eventName => dropArea.addEventListener(eventName, () => dropArea.classList.remove('dragover'), false));
+        dropArea.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files, fileArray, listId, acceptedTypes), false);
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files, fileArray, listId, acceptedTypes), false);
+    }
+
+    function handleFiles(files, fileArray, listId, acceptedTypes) {
+        [...files].forEach(file => {
+            if (acceptedTypes.some(type => file.name.toLowerCase().endsWith(type))) {
+                if (!fileArray.find(f => f.name === file.name && f.size === file.size)) fileArray.push(file);
+            } else alert(`${file.name} 파일은 지원되지 않는 형식입니다.`);
+        });
+        updateFileList(fileArray, listId);
+    }
+
+    function updateFileList(fileArray, listId) {
+        const fileList = document.getElementById(listId);
+        fileList.innerHTML = '';
+        fileArray.forEach((file, index) => {
+            const li = document.createElement('li');
+            li.className = 'file-list-item';
+            li.innerHTML = `<span>${file.name}</span><button class="file-delete-btn" onclick="deleteFile('${listId}', ${index})">X</button>`;
+            fileList.appendChild(li);
+        });
+    }
+
+    function deleteFile(listId, index) {
+        const fileArray = listId === 'excel-file-list' ? excelFiles : pdfFiles;
+        fileArray.splice(index, 1);
+        updateFileList(fileArray, listId);
+    }
+
+    setupDragDrop('excel-drop-area', 'excel-file-input', excelFiles, 'excel-file-list', ['.xlsx', '.xls']);
+    setupDragDrop('pdf-drop-area', 'pdf-file-input', pdfFiles, 'pdf-file-list', ['.pdf']);
+
+    async function startAnalysis() {
+        const option = document.querySelector('input[name="process-option"]:checked').value;
+        const loader = document.getElementById('loader');
+        const processBtn = document.getElementById('process-btn');
+        const resultsArea = document.getElementById('results-area');
+
+        resultsArea.style.display = 'none';
+        ['shipping-results', 'fedex-results', 'comparison-results'].forEach(id => document.getElementById(id).innerHTML = '');
+        loader.style.display = 'block';
+        processBtn.disabled = true;
+
+        try {
+            let shippingData = [], fedexData = [];
+            if (option === 'excel' || option === 'compare') {
+                if (excelFiles.length === 0) throw new Error("엑셀 파일을 업로드해주세요.");
+                shippingData = (await Promise.all(excelFiles.map(processExcelFile))).flat();
+            }
+            if (option === 'pdf' || option === 'compare') {
+                if (pdfFiles.length === 0) throw new Error("PDF 파일을 업로드해주세요.");
+                fedexData = (await Promise.all(pdfFiles.map(processPdfFile))).flat();
+            }
+            if (shippingData.length === 0 && fedexData.length === 0) {
+                 alert("처리된 데이터가 없습니다. 파일의 내용과 형식을 다시 확인해주세요.");
+            }
+            
+            const sortFn = (a, b) => new Date(a.OTOS출고일 || a.Fedex선적일) - new Date(b.OTOS출고일 || b.Fedex선적일);
+            shippingData.sort(sortFn);
+            fedexData.sort(sortFn);
+
+            resultsArea.style.display = 'block';
+            if (option === 'excel') createShippingTable(shippingData);
+            else if (option === 'pdf') createFedexTable(fedexData);
+            else if (option === 'compare') createComparisonTable(compareData(shippingData, fedexData));
+        } catch (error) {
+            console.error('분석 중 오류 발생:', error);
+            alert(`오류가 발생했습니다: ${error.message}`);
+        } finally {
+            loader.style.display = 'none';
+            processBtn.disabled = false;
+        }
+    }
+
+    function processExcelFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                    const sheetName = 'Customs Invoice';
+                    if (!workbook.SheetNames.includes(sheetName)) {
+                        console.warn(`'${sheetName}' 시트를 찾을 수 없습니다: ${file.name}`);
+                        resolve([]);
+                        return;
+                    }
+                    const worksheet = workbook.Sheets[sheetName];
+                    resolve(extractShippingInfo(worksheet, file.name));
+                } catch (err) { reject(new Error(`${file.name} 처리 중 오류: ${err.message}`)); }
+            };
+            reader.onerror = () => reject(new Error(`파일 읽기 오류: ${file.name}`));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    function extractDateFromFilename(filename) {
+        const match = filename.match(/(\d{6,8})/);
+        if (!match) return null;
+        let dateStr = match[1];
+        if (dateStr.length === 6) {
+            let year = parseInt(dateStr.substring(0, 2), 10);
+            return `${year < 70 ? 2000 + year : 1900 + year}-${dateStr.substring(2, 4)}-${dateStr.substring(4, 6)}`;
+        }
+        if (dateStr.length === 8) {
+            return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
+        }
+        return null;
+    }
+
+    function extractShippingInfo(worksheet, filename) {
+        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+        const date = extractDateFromFilename(filename);
+        let packingRowIndex = -1;
+        for (let i = 0; i < json.length; i++) {
+            if (json[i].some(cell => typeof cell === 'string' && cell.toUpperCase().includes('PACKING'))) {
+                packingRowIndex = i;
+                break;
+            }
+        }
+        if (packingRowIndex === -1) return [];
+
+        const extractedData = [];
+        const searchLimit = Math.min(packingRowIndex + 11, json.length);
+        for (let i = packingRowIndex; i < searchLimit; i++) {
+            const rowStr = json[i].join(' ');
+            const match = rowStr.match(/(\d+)\s*\*\s*(\d+)\s*\*\s*(\d+)\s*mm\s*\/\s*([\d.]+)\s*kg\s*\/\s*(\d+)\s*ea/i);
+            if (match) {
+                try {
+                    const [_, w, l, h, weightStr, quantity] = match;
+                    const w_cm = Math.round(parseInt(w) / 10);
+                    const l_cm = Math.round(parseInt(l) / 10);
+                    const h_cm = Math.round(parseInt(h) / 10);
+                    const numericWeight = parseFloat(weightStr);
+                    let numericVolume = (parseInt(w) * parseInt(l) * parseInt(h)) / 5000000;
+                    if (numericWeight < 1) {
+                        numericVolume = 0;
+                    }
+                    const finalVolume = (numericVolume === 0) ? 0 : Math.floor(numericVolume * 10) / 10;
+                    
+                    extractedData.push({
+                        'OTOS출고일': date,
+                        '출고 박스수량': 1,
+                        '출고 크기': `${w_cm}×${l_cm}×${h_cm}cm`,
+                        '출고 중량': numericWeight,
+                        '출고 수량': parseInt(quantity, 10),
+                        '출고 부피': finalVolume,
+                    });
+                } catch (e) { console.error(`[Excel: ${filename}] 데이터 파싱 중 오류 (행: ${i}): ${e.message}`); }
+            }
+        }
+        return extractedData;
+    }
+
+    function processPdfFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(e.target.result) }).promise;
+                    let fullText = '';
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        fullText += content.items.map(item => item.str).join(' ');
+                    }
+                    resolve(extractFedexInfo(fullText, file.name));
+                } catch (err) { reject(new Error(`${file.name} PDF 처리 중 오류: ${err.message}`)); }
+            };
+            reader.onerror = () => reject(new Error(`PDF 파일 읽기 오류: ${file.name}`));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+    
+    function extractFedexInfo(text, filename) {
+        const results = [];
+        const sections = text.split(/Ship Date/g).slice(1);
+        sections.forEach(section => {
+            const recipientMatch = section.match(/Recipient([\s\S]+?)(?:Shipper|발송인|운임\s*Freight Charges)/i);
+            if (!recipientMatch || !recipientMatch[1].toLowerCase().includes("cotral")) return;
+            const shipDateMatch = section.match(/(\d{2}\/\d{2}\/\d{4})/);
+            if (!shipDateMatch) return;
+            const shipDate = new Date(shipDateMatch[1]);
+            const formattedShipDate = `${shipDate.getFullYear()}-${String(shipDate.getMonth() + 1).padStart(2, '0')}-${String(shipDate.getDate()).padStart(2, '0')}`;
+            const packageDetailsMatch = section.match(/Package Details\s+패키지\s+세부정보([\s\S]*)/i);
+            if (!packageDetailsMatch) return;
+            const detailsText = packageDetailsMatch[1];
+            const uniqueTrackingIds = [...new Set([...detailsText.matchAll(/(\d{12})/g)].map(m => m[0]))];
+            uniqueTrackingIds.forEach(trackingId => {
+                const trackingIdRegex = new RegExp(trackingId + '([\\s\\S]*?)(?=' + (uniqueTrackingIds[uniqueTrackingIds.indexOf(trackingId) + 1] || '$') + ')');
+                const itemText = detailsText.match(trackingIdRegex)?.[0] || '';
+                const ratedWeightMatch = itemText.match(/(\d+\.\d+)\s*kg/);
+                const weightTypeMatch = itemText.match(/(Customer Dim weight|Actual Weight)/);
+                const sizeMatch = itemText.match(/\(([\d\s.x]+cm)\)/);
+                results.push({
+                    'Fedex선적일': formattedShipDate,
+                    'Tracking ID': trackingId,
+                    '정격 중량': ratedWeightMatch ? ratedWeightMatch[1] + 'kg' : 'N/A',
+                    '중량 유형': weightTypeMatch ? weightTypeMatch[1] : 'N/A',
+                    '크기': sizeMatch ? sizeMatch[1].replace(/\s/g, '').replace(/cm$/, '').replace(/x/g, '×') + 'cm' : 'N/A',
+                });
+            });
+        });
+        return results;
+    }
+
+    // [수정됨] 3가지 일치 조건(날짜, 크기, 중량/부피)을 모두 확인하는 로직
+    function compareData(shippingData, fedexData) {
+        const comparisonResults = [];
+        const shippingDataCopy = [...shippingData];
+        const normalizeSize = s => s === 'N/A' || !s ? null : s.replace(/cm/g, '').replace(/\s/g, '').replace(/x/g, '×').split('×').map(d => Math.round(parseFloat(d))).sort((a, b) => a - b).join('×');
+
+        fedexData.forEach(fedex => {
+            const fedexSizeNormalized = normalizeSize(fedex.크기);
+            // FedEx 데이터에서 숫자 중량 추출 (예: "5.9kg" -> 5.9)
+            const fedexWeight = fedex['정격 중량'] ? parseFloat(fedex['정격 중량']) : null;
+            
+            let bestMatchIndex = -1;
+            for (let i = 0; i < shippingDataCopy.length; i++) {
+                const shipping = shippingDataCopy[i];
+                
+                // 조건 1: 날짜 일치
+                const dateMatch = fedex.Fedex선적일 === shipping.OTOS출고일;
+                
+                // 조건 2: 크기 일치
+                const sizeMatch = fedexSizeNormalized === normalizeSize(shipping['출고 크기']);
+                
+                // 조건 3: 정격 중량(FedEx)과 출고 부피(OTOS) 일치 (부동소수점 오차 감안)
+                const weightVolumeMatch = (fedexWeight !== null) && (Math.abs(fedexWeight - shipping['출고 부피']) < 0.01);
+
+                // 세 가지 조건이 모두 참인지 확인
+                if (dateMatch && sizeMatch && weightVolumeMatch) {
+                    bestMatchIndex = i;
+                    break;
+                }
+            }
+            
+            const matchedShippingInfo = bestMatchIndex !== -1 ? shippingDataCopy.splice(bestMatchIndex, 1)[0] : {};
+            comparisonResults.push({ ...fedex, ...matchedShippingInfo, '일치여부': bestMatchIndex !== -1 ? '✅ 일치' : '❌ 출고정보 없음' });
+        });
+
+        shippingDataCopy.forEach(shipping => comparisonResults.push({ 'Fedex선적일': 'N/A', 'Tracking ID': 'N/A', '정격 중량': 'N/A', '중량 유형': 'N/A', '크기': 'N/A', ...shipping, '일치여부': '❌ FedEx정보 없음' }));
+        comparisonResults.sort((a,b) => new Date(a.Fedex선적일 === 'N/A' ? a.OTOS출고일 : a.Fedex선적일) - new Date(b.Fedex선적일 === 'N/A' ? b.OTOS출고일 : b.Fedex선적일));
+        return comparisonResults;
+    }
+
+    function createTable(data, headers, dataKeys) {
+        if (data.length === 0) return '<p>표시할 데이터가 없습니다.</p>';
+        let table = '<div class="table-container"><table><thead><tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+        data.forEach(row => {
+            table += '<tr>' + dataKeys.map(key => {
+                const value = row[key] ?? '';
+                if (key !== '일치여부') return `<td>${value}</td>`;
+                const className = value.includes('일치') ? 'status-match' : 'status-mismatch';
+                return `<td class="${className}">${value}</td>`;
+            }).join('') + '</tr>';
+        });
+        return table + '</tbody></table></div>';
+    }
+
+    function createShippingTable(data) {
+        const headers = ['OTOS출고일', '출고 박스수량', '출고 크기 (cm)', '출고 중량 (kg)', '출고 수량', '출고 부피 (kg)'];
+        const dataKeys = ['OTOS출고일', '출고 박스수량', '출고 크기', '출고 중량', '출고 수량', '출고 부피'];
+        document.getElementById('shipping-results').innerHTML = '<h2>OTOS 출고정보</h2>' + createTable(data, headers, dataKeys);
+    }
+
+    function createFedexTable(data) {
+        const headers = ['Fedex선적일', 'Tracking ID', '정격 중량', '중량 유형', '크기 (cm)'];
+        const dataKeys = ['Fedex선적일', 'Tracking ID', '정격 중량', '중량 유형', '크기'];
+        document.getElementById('fedex-results').innerHTML = '<h2>FedEx 정보</h2>' + createTable(data, headers, dataKeys);
+    }
+
+    function createComparisonTable(data) {
+        const headers = [
+            'Fedex선적일', 'Tracking ID', '정격 중량', '중량 유형', '크기 (cm)',
+            'OTOS출고일', '출고 박스수량', '출고 크기 (cm)', '출고 중량 (kg)', '출고 수량', '출고 부피 (kg)',
+            '일치여부'
+        ];
+        const dataKeys = [
+            'Fedex선적일', 'Tracking ID', '정격 중량', '중량 유형', '크기',
+            'OTOS출고일', '출고 박스수량', '출고 크기', '출고 중량', '출고 수량', '출고 부피',
+            '일치여부'
+        ];
+        document.getElementById('comparison-results').innerHTML = '<h2>비교 분석 결과</h2>' + createTable(data, headers, dataKeys);
+        document.getElementById('fedex-results').innerHTML = '';
+        document.getElementById('shipping-results').innerHTML = '';
+    }
+
+    function getTableDataForExport() {
+        const option = document.querySelector('input[name="process-option"]:checked').value;
+        const tableSelector = option === 'compare' ? '#comparison-results table' : option === 'excel' ? '#shipping-results table' : '#fedex-results table';
+        const table = document.querySelector(tableSelector);
+        if (!table) { alert("다운로드할 데이터가 없습니다."); return null; }
+        const data = [];
+        table.querySelectorAll('tr').forEach(tr => {
+            const row = [];
+            tr.querySelectorAll('th, td').forEach(td => row.push(td.innerText));
+            data.push(row);
+        });
+        return data;
+    }
+
+    function downloadExcel() {
+        const data = getTableDataForExport();
+        if (!data) return;
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Analysis_Result');
+        XLSX.writeFile(wb, 'Cotral_Analysis_Result.xlsx');
+    }
+
+    function downloadCSV() {
+        const data = getTableDataForExport();
+        if (!data) return;
+        const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + data.map(e => e.join(",")).join("\n");
+        const link = document.createElement("a");
+        link.setAttribute("href", encodeURI(csvContent));
+        link.setAttribute("download", "Cotral_Analysis_Result.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+</body>
+</html>
